@@ -1,49 +1,28 @@
-#===============================================================================
-# ################################ PolyPharmacy ################################
-# ==============================================================================
+#=======================================================
+# ################################ PolyPharmacy #######################################
+# ============================================================================
 
-# depending on the data source, some of these packages...
-library(allofus)
 library(tidyverse)
+library(ohdsilab)
+library(DBI)
+library(DatabaseConnector)
 library(CDMConnector)
-#library(lubridate)
-#library(DBI)
-library(aouFI)
-#library(DatabaseConnector)
+library(glue)
 
-# allofus connection
-con <- allofus::aou_connect(quiet = TRUE)
-# pharmetrics connection
 source(here::here("functions", "connection_setup.R"))
-
-#source(here::here("functions", "connection_setup.R"))
-data_source = "allofus"
 data_source = "pharmetrics"
 
 # I had to do this separately - for some reason adding this to the query in redshift
 # Is overloading the db and it either won't collect and times out or just crashes.
-# dbms = con@dbms # pmtx
-dbms = "bigquery" # bigrquery DBI connection doesn't hold the information the same way.
+dbms = con@dbms
 
-# point this to your cohort with columns person_id, age_group, is_female, etc.
-cohort_all = demo
-# cohort_all = tbl(con, inDatabaseSchema(my_schema, "frailty_cohort_clean")) # PMTX
+cohort_all = tbl(con, inDatabaseSchema(my_schema, "frailty_cohort_clean"))
 
-# pointer to tables needed.
-# changes depending on data source.
-
-# allofus
-concept = tbl(con, "concept")
-drug_exp = tbl(con, "drug_exposure")
-concept_an = tbl(con, "concept_ancestor")
-
-# PMTX
-# concept = tbl(con, inDatabaseSchema(cdm_schema, "concept"))
-# drug_exp = tbl(con, inDatabaseSchema(cdm_schema, "drug_exposure"))
-# concept_an = tbl(con, inDatabaseSchema(cdm_schema, "concept_ancestor"))
+concept = tbl(con, inDatabaseSchema(cdm_schema, "concept"))
+drug_exp = tbl(con, inDatabaseSchema(cdm_schema, "drug_exposure"))
+concept_an = tbl(con, inDatabaseSchema(cdm_schema, "concept_ancestor"))
 
 
-# date functions switch between redshift and bigrquery.
 pp_lookback <- switch (dbms,
                        "redshift" = glue::glue("DATEADD(YEAR, -1, person_end_date)"),
                        "bigquery" = glue::glue("DATE_ADD(person_end_date, INTERVAL -1 YEAR)"),
@@ -56,7 +35,7 @@ pp_datediff <- switch (dbms,
                        rlang::abort(glue::glue("Connection type {paste(class(dot$src$con), collapse = ', ')} is not supported!"))
 )
 
-# date functions for polypharmacy adjustment for drug_exposure table below.
+
 add_days_supply <- switch (dbms,
                            "redshift" = glue::glue("DATEADD(DAY, days_supply, drug_exposure_start_date)"),
                            "bigquery" = glue::glue("DATE_ADD(drug_exposure_start_date, INTERVAL days_supply DAY)"),
@@ -67,7 +46,6 @@ add_1_day <- switch (dbms,
                      "bigquery" = glue::glue("DATE_ADD(drug_exposure_start_date, INTERVAL 1 DAY)"),
                      rlang::abort(glue::glue("Connection type {paste(class(dot$src$con), collapse = ', ')} is not supported!"))
 )
-
 
 #antibiotics
 antibiotics = concept %>%
@@ -81,19 +59,17 @@ antibiotics = concept %>%
            as.Date("2024-07-15") <= valid_end_date) %>%
     select(ingredient_concept_id = concept_id, ingredient_concept_name = concept_name, ingredient_concept_code = concept_code)
 
-# initial drugs
+
 drugs = concept %>%
     filter(concept_class_id == "Ingredient", vocabulary_id == "RxNorm") %>%
     inner_join(concept_an ,
                by = join_by(concept_id == ancestor_concept_id))
 
-# rebuild drug era table (essentially)
 drug_era2 = drug_exp %>%
     filter(drug_concept_id != 0, days_supply >= 0) %>%
     inner_join(drugs, by = join_by(drug_concept_id == descendant_concept_id)) %>%
     select(drug_exposure_id, person_id, ingredient_concept_id = concept_id, drug_exposure_start_date, drug_exposure_end_date, days_supply) %>%
     anti_join(antibiotics, by = join_by(ingredient_concept_id)) %>%
-    # this replaces the coalesce function from the SQL code that I couldn't get to work.
     mutate(
         drug_exposure_end_date = case_when(
             !is.na(drug_exposure_end_date) ~ drug_exposure_end_date,
@@ -102,7 +78,7 @@ drug_era2 = drug_exp %>%
         )
     )
 
-# put together with the cohort and get all people wiht more than 10 ingredients in teh time span.
+
 pp = drug_era2 %>%
     inner_join(cohort_all, by = "person_id", x_as = "pp1", y_as = "pp2") %>%
     select(person_start_date = visit_lookback_date, person_end_date = index_date,
@@ -128,19 +104,23 @@ pp = drug_era2 %>%
         category
     )
 
-# calculate prevalence.
-pp_prevalence = cohort_all %>%
-    left_join(pp %>% select(person_id, score), by = "person_id") %>%
+CDMConnector::computeQuery(pp, "frailty_cohort_polypharmacy", temporary = FALSE, schema = my_schema, overwrite = TRUE)
+
+
+pp_db = tbl(con, inDatabaseSchema(my_schema, "frailty_cohort_polypharmacy"))
+
+cohort_all %>%
+    left_join(pp_db %>% select(person_id, score), by = "person_id") %>%
     mutate(score = ifelse(is.na(score), 0, 1)) %>%
     count(score, is_female, age_group) %>%
-    collect() %>%
     group_by(is_female, age_group) %>%
     mutate(total = sum(n)) %>%
     ungroup() %>%
+    collect() %>%
     filter(score == 1) %>%
-    mutate(pct = scales::label_percent()(n/total))
+    mutate(pct = scales::label_percent()(n/total)) -> t
 
-# numbers for Chen
+
 # 0
 pp2 = drug_era2 %>%
     inner_join(cohort_all, by = "person_id", x_as = "pp1", y_as = "pp2") %>%
