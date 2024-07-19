@@ -2,45 +2,41 @@
 # ################################ PolyPharmacy ################################
 # ==============================================================================
 
+
 # depending on the data source, some of these packages...
-library(allofus)
 library(tidyverse)
 library(CDMConnector)
-#library(lubridate)
-#library(DBI)
 library(aouFI)
-#library(DatabaseConnector)
 
-# allofus connection
-con <- allofus::aou_connect(quiet = TRUE)
-# pharmetrics connection
-source(here::here("functions", "connection_setup.R"))
-
-#source(here::here("functions", "connection_setup.R"))
-data_source = "allofus"
+#data_source = "allofus"
 data_source = "pharmetrics"
 
-# I had to do this separately - for some reason adding this to the query in redshift
-# Is overloading the db and it either won't collect and times out or just crashes.
-# dbms = con@dbms # pmtx
-dbms = "bigquery" # bigrquery DBI connection doesn't hold the information the same way.
+if(data_source == "allofus"){
 
-# point this to your cohort with columns person_id, age_group, is_female, etc.
-cohort_all = demo
-# cohort_all = tbl(con, inDatabaseSchema(my_schema, "frailty_cohort_clean")) # PMTX
+    library(allofus)
+    con <- allofus::aou_connect(quiet = TRUE)
+    dbms = "bigquery" # bigrquery DBI connection doesn't hold the information the same way.
+    cohort_all = demo
 
-# pointer to tables needed.
-# changes depending on data source.
+    concept = tbl(con, "concept")
+    drug_exp = tbl(con, "drug_exposure")
+    concept_an = tbl(con, "concept_ancestor")
 
-# allofus
-concept = tbl(con, "concept")
-drug_exp = tbl(con, "drug_exposure")
-concept_an = tbl(con, "concept_ancestor")
 
-# PMTX
-# concept = tbl(con, inDatabaseSchema(cdm_schema, "concept"))
-# drug_exp = tbl(con, inDatabaseSchema(cdm_schema, "drug_exposure"))
-# concept_an = tbl(con, inDatabaseSchema(cdm_schema, "concept_ancestor"))
+} else {
+
+    library(DatabaseConnector)
+    source(here::here("functions", "connection_setup.R"))
+    dbms = con@dbms # pmtx
+    cohort_all = tbl(con, inDatabaseSchema(my_schema, "frailty_cohort_clean")) # PMTX
+
+    # PMTX
+    concept = tbl(con, inDatabaseSchema(cdm_schema, "concept"))
+    drug_exp = tbl(con, inDatabaseSchema(cdm_schema, "drug_exposure"))
+    concept_an = tbl(con, inDatabaseSchema(cdm_schema, "concept_ancestor"))
+
+
+}
 
 
 # date functions switch between redshift and bigrquery.
@@ -89,7 +85,7 @@ drugs = concept %>%
 
 # rebuild drug era table (essentially)
 drug_era2 = drug_exp %>%
-    filter(drug_concept_id != 0, days_supply >= 0) %>%
+    filter(drug_concept_id != 0, days_supply >= 0 | is.na(days_supply)) %>%
     inner_join(drugs, by = join_by(drug_concept_id == descendant_concept_id)) %>%
     select(drug_exposure_id, person_id, ingredient_concept_id = concept_id, drug_exposure_start_date, drug_exposure_end_date, days_supply) %>%
     anti_join(antibiotics, by = join_by(ingredient_concept_id)) %>%
@@ -97,7 +93,7 @@ drug_era2 = drug_exp %>%
     mutate(
         drug_exposure_end_date = case_when(
             !is.na(drug_exposure_end_date) ~ drug_exposure_end_date,
-            days_supply > 0 ~ dplyr::sql(!!add_days_supply),
+            (!is.na(days_supply) & days_supply > 0) ~ dplyr::sql(!!add_days_supply),
             TRUE ~ dplyr::sql(!!add_1_day)
         )
     )
