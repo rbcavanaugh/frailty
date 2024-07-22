@@ -124,38 +124,53 @@ pp = drug_era2 %>%
         category
     )
 
-# calculate prevalence.
-pp_prevalence = cohort_all %>%
-    left_join(pp %>% select(person_id, score), by = "person_id") %>%
-    mutate(score = ifelse(is.na(score), 0, 1)) %>%
-    count(score, is_female, age_group) %>%
-    collect() %>%
-    group_by(is_female, age_group) %>%
-    mutate(total = sum(n)) %>%
-    ungroup() %>%
-    filter(score == 1) %>%
-    mutate(pct = scales::label_percent()(n/total))
 
-# numbers for Chen
-# 0
-pp2 = drug_era2 %>%
-    inner_join(cohort_all, by = "person_id", x_as = "pp1", y_as = "pp2") %>%
-    select(person_start_date = visit_lookback_date, person_end_date = index_date,
-           person_id, ingredient_concept_id , drug_exposure_start_date , drug_exposure_end_date ) |>
-    mutate(drug_search_start_date = dplyr::sql(!!pp_lookback),
-           era_date_diff = dplyr::sql(!!pp_datediff))  |>
-    filter(
-        (drug_exposure_start_date >= drug_search_start_date & drug_exposure_start_date <= person_end_date) | (drug_exposure_end_date >= drug_search_start_date & drug_exposure_end_date <= person_end_date),
-        era_date_diff >= 1
-    ) |>
-    distinct(person_id, ingredient_concept_id) |>
-    count(person_id)
+if(data_source == "allofus"){
 
-cohort_all %>%
-    select(person_id) %>%
-    left_join(pp2, by = "person_id") %>%
-    mutate(n = ifelse(is.na(n), 0, n)) -> pp_0
+    pp_tmp = allofus::aou_create_temp_table(pp)
 
-pp_0c = collect(pp_0)
-quantile(pp_0c$n, probs = seq(0, 1, 0.1))
+} else {
+
+    CDMConnector::computeQuery(pp, "frailty_cohort_polypharmacy", temporary = FALSE, schema = my_schema, overwrite = TRUE)
+
+}
+
+
+# # calculate prevalence.
+# pp_prevalence = cohort_all %>%
+#     left_join(pp %>% select(person_id, score), by = "person_id") %>%
+#     mutate(score = ifelse(is.na(score), 0, 1)) %>%
+#     count(score, is_female, age_group) %>%
+#     collect() %>%
+#     group_by(is_female, age_group) %>%
+#     mutate(total = sum(n)) %>%
+#     ungroup() %>%
+#     filter(score == 1) %>%
+#     mutate(pct = scales::label_percent()(n/total))
+#
+# # numbers for Chen
+# # 0
+# pp2 = drug_era2 %>%
+#     inner_join(cohort_all, by = "person_id", x_as = "pp1", y_as = "pp2") %>%
+#     select(person_start_date = visit_lookback_date, person_end_date = index_date,
+#            person_id, ingredient_concept_id , drug_exposure_start_date , drug_exposure_end_date ) |>
+#     mutate(drug_search_start_date = dplyr::sql(!!pp_lookback),
+#            era_date_diff = dplyr::sql(!!pp_datediff))  |>
+#     filter(
+#         (drug_exposure_start_date >= drug_search_start_date & drug_exposure_start_date <= person_end_date) | (drug_exposure_end_date >= drug_search_start_date & drug_exposure_end_date <= person_end_date),
+#         era_date_diff >= 1
+#     ) |>
+#     distinct(person_id, ingredient_concept_id) |>
+#     count(person_id)
+#
+# cohort_all %>%
+#     select(person_id) %>%
+#     left_join(pp2, by = "person_id") %>%
+#     mutate(n = ifelse(is.na(n), 0, n)) -> pp_0
+#
+# pp_0c = collect(pp_0)
+# quantile(pp_0c$n, probs = seq(0, 1, 0.1))
+
+
+
 
