@@ -115,8 +115,8 @@ calculate_pp <- function() {
 
 if(data_source == "allofus"){
 
-    pp = calculate_pp()
-    pp_tmp = allofus::aou_create_temp_table(pp)
+    pp = calculate_pp() %>% collect()
+    pp_tmp = allofus::aou_create_temp_table(pp, nchar_batch = 1e5)
 
 } else {
 

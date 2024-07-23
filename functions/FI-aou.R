@@ -1,14 +1,14 @@
 
 library(tidyverse)
-library(ohdsilab)
 library(DBI)
 library(DatabaseConnector)
 library(CDMConnector)
 library(glue)
-
+library(allofus)
+library(aouFI)
 
 # set to pharmetrics or allofus.
-data_source = "pharmetrics"
+data_source = "allofus"
 
 
 # ============================================================================
@@ -62,6 +62,15 @@ if(data_source == "pharmetrics"){
     # get pp
     source(here::here("functions", "02-polypharmacy-aou.R"))
 
+    # creating fi tables
+    vafi_rev2 = aouFI::vafi_rev %>% select(category, concept_id, score) %>%
+        left_join(aouFI::lb %>% filter(fi == "vafi"), by = "category") %>%
+        aou_create_temp_table(nchar_batch = 1e5)
+
+    efi_rev2 = aouFI::fi_indices %>% filter(fi == "efi_sno") %>% select(-fi) %>%
+        left_join(aouFI::lb %>% filter(fi == "efi"), by = "category") %>%
+        aou_create_temp_table(nchar_batch = 1e5)
+
 # ============================================================================
 # ################################ NONE #######################################
 # ============================================================================
@@ -74,8 +83,8 @@ if(data_source == "pharmetrics"){
 # ============================================================================
 
 
-vafi_all <- omop2fi_lb(con = con,
-                       schema = cdm_schema,
+vafi_all_aa <- omop2fi_lb(con = con,
+                       #schema = cdm_schema,
                        index = "vafi",
                        .data_search = cohort_all,
                        search_person_id = "person_id",
@@ -84,57 +93,42 @@ vafi_all <- omop2fi_lb(con = con,
                        keep_columns = c("age_group", "is_female"),
                        collect = FALSE,
                        unique_categories = TRUE,
-                       dbms = "redshift",
-                       concept_location = tbl(con, inDatabaseSchema(my_schema, "vafi_rev2")) |> rename(chronic_category = lookback),
+                       dbms = "bigquery",
+                       concept_location = vafi_rev2 |> rename(chronic_category = lookback),
                        acute_lookback = 1,
                        chronic_lookback = 1
 ) |>
     distinct(person_id, age_group, is_female, score, category)
-
-dplyr::compute(vafi_all, inDatabaseSchema(my_schema, "vafi_all_aa"),
-               temporary = FALSE,
-               overwrite = TRUE)
-
-rm(vafi_all)
 
 # ============================================================================
 # ################################ VAFI VARIABLE LOOKBACK ####################
 # ============================================================================
 
 
-vafi_all <- omop2fi_lb(con = con,
-                       schema = cdm_schema,
-                       index = "vafi",
-                       .data_search = cohort_all,
-                       search_person_id = "person_id",
-                       search_start_date = "visit_lookback_date",
-                       search_end_date = "index_date",
-                       keep_columns = c("age_group", "is_female"),
-                       collect = FALSE,
-                       unique_categories = TRUE,
-                       dbms = "redshift",
-                       concept_location = tbl(con, inDatabaseSchema(my_schema, "vafi_rev2")) |> rename(chronic_category = lookback),
+vafi_all_ac <- omop2fi_lb(con = con,
+                          #schema = cdm_schema,
+                          index = "vafi",
+                          .data_search = cohort_all,
+                          search_person_id = "person_id",
+                          search_start_date = "visit_lookback_date",
+                          search_end_date = "index_date",
+                          keep_columns = c("age_group", "is_female"),
+                          collect = FALSE,
+                          unique_categories = TRUE,
+                          dbms = "bigquery",
+                          concept_location = vafi_rev2 |> rename(chronic_category = lookback),
                        acute_lookback = 1,
                        chronic_lookback = 3
 ) |>
     distinct(person_id, age_group, is_female, score, category)
-
-
-dplyr::compute(vafi_all, inDatabaseSchema(my_schema, "vafi_all_ac"),
-               temporary = FALSE,
-               overwrite = TRUE)
-
-rm(vafi_all)
-
 
 # ============================================================================
 # ################################ VAFI SUMMARIZING #######################################
 # ============================================================================
 cohort_c = cohort_all |> select(person_id, age_group, is_female) %>% collect()
 
-
 # 1 year acute acute
-vafi_all = tbl(con, inDatabaseSchema(my_schema, "vafi_all_aa"))
+vafi_all = vafi_all_aa
 
 # add robust individuals back
 vafi_all_summary <- fi_with_robust(
@@ -168,7 +162,7 @@ rm(vafi_c)
 gc()
 
 # 1-3 year acute chronic
-vafi_all = tbl(con, inDatabaseSchema(my_schema, "vafi_all_ac"))
+vafi_all = vafi_all_ac
 
 # add robust individuals back
 vafi_all_summary <- fi_with_robust(
@@ -208,7 +202,6 @@ gc()
 # ============================================================================
 
 efi_all <- aouFI::omop2fi_lb(con = con,
-                             schema = cdm_schema,
                              index = "efi",
                              .data_search = cohort_all,
                              search_person_id = "person_id",
@@ -217,7 +210,8 @@ efi_all <- aouFI::omop2fi_lb(con = con,
                              keep_columns = c("age_group", "is_female"),
                              collect = FALSE,
                              unique_categories = TRUE,
-                             concept_location = tbl(con, inDatabaseSchema(my_schema, "efi_rev2")) |> rename(chronic_category = lookback),
+                             dbms = "bigquery",
+                             concept_location = efi_rev2 |> rename(chronic_category = lookback),
                              acute_lookback = 1,
                              chronic_lookback = 1
 ) |>
@@ -225,14 +219,8 @@ efi_all <- aouFI::omop2fi_lb(con = con,
 
 union_all(
     efi_all,
-    tbl(con, inDatabaseSchema(my_schema, "frailty_cohort_polypharmacy"))
-) %>% distinct() -> efi_all
-
-# save result of query as intermediate step #2
-
-dplyr::compute(efi_all, inDatabaseSchema(my_schema, "efi_all_aa"),
-               temporary = FALSE,
-               overwrite = TRUE)
+    pp_tmp
+) %>% distinct() -> efi_all_aa
 
 rm(efi_all)
 
@@ -241,7 +229,6 @@ rm(efi_all)
 # ============================================================================
 
 efi_all <- omop2fi_lb(con = con,
-                       schema = cdm_schema,
                        index = "efi",
                        .data_search = cohort_all,
                        search_person_id = "person_id",
@@ -250,8 +237,8 @@ efi_all <- omop2fi_lb(con = con,
                        keep_columns = c("age_group", "is_female"),
                        collect = FALSE,
                        unique_categories = TRUE,
-                       dbms = "redshift",
-                       concept_location = tbl(con, inDatabaseSchema(my_schema, "efi_rev2")) |> rename(chronic_category = lookback),
+                       dbms = "bigquery",
+                       concept_location = efi_rev2 |> rename(chronic_category = lookback),
                        acute_lookback = 1,
                        chronic_lookback = 3
 ) |>
@@ -259,14 +246,8 @@ efi_all <- omop2fi_lb(con = con,
 
 union_all(
     efi_all,
-    tbl(con, inDatabaseSchema(my_schema, "frailty_cohort_polypharmacy"))
-) %>% distinct() -> efi_all
-
-# save result of query as intermediate step #2
-
-dplyr::compute(efi_all, inDatabaseSchema(my_schema, "efi_all_ac"),
-               temporary = FALSE,
-               overwrite = TRUE)
+    pp_tmp
+) %>% distinct() -> efi_all_ac
 
 rm(efi_all)
 
@@ -275,7 +256,7 @@ rm(efi_all)
 # ============================================================================
 
 # 1 year lookback
-efi_all = tbl(con, inDatabaseSchema(my_schema, "efi_all_aa"))
+efi_all = efi_all_aa
 
 # add robust individuals back
 efi_all_summary <- fi_with_robust(
@@ -307,12 +288,13 @@ write.csv(efi_cat_summary, glue("KI/{Sys.Date()}_efi_categories_acute1-chronic1_
 rm(t)
 rm(efi_cat_summary)
 rm(efi_c)
+rm(efi_all)
 gc()
 
 
 
 # Variable year lookback
-efi_all = tbl(con, inDatabaseSchema(my_schema, "efi_all_ac"))
+efi_all = efi_all_ac
 
 # add robust individuals back
 efi_all_summary <- fi_with_robust(
