@@ -9,57 +9,20 @@ library(aouFI)
 
 # set to pharmetrics or allofus.
 data_source = "allofus"
-
-
-# ============================================================================
-# ################################ PMTX #######################################
-# ============================================================================
-if(data_source == "pharmetrics"){
-
-    # pmtx connection
-    source(here::here("functions", "connection_setup.R"))
-    dbms = con@dbms # pmtx
-
-    # get cohort'
-    source(here::here("functions", "01-cohort.R"))
-    cohort_all = tbl(con, inDatabaseSchema(my_schema, "frailty_cohort_clean")) # PMTX
-    # get pp data
-    source(here::here("functions", "02-polypharmacy-aou.R"))
-
-    # setup FI in pharmetrics
-
-    if(!DatabaseConnector::existsTable(con, my_schema, "vafi_rev2")){
-
-        tbl(con, inDatabaseSchema(my_schema, "vafi_rev")) |> collect() -> vafi_rev
-        vafi_lb = tbl(con, inDatabaseSchema(my_schema, "vafi_rev")) %>% collect() %>%
-            left_join(aouFI::lb %>% filter(fi == "vafi") %>% select(-fi), by = "category")
-        insertTable_chunk(vafi_lb, "vafi_rev2")
-    }
-
-
-    if(DatabaseConnector::existsTable(con, my_schema, "efi_rev2")){
-        tbl(con, inDatabaseSchema(my_schema, "efi_rev")) |> collect() -> efi_rev
-        efi_lb = tbl(con, inDatabaseSchema(my_schema, "efi_rev")) %>% collect() %>%
-            left_join(aouFI::lb %>% filter(fi == "efi") %>% select(-fi), by = "category")
-        insertTable_chunk(efi_lb, "efi_rev2")
-    }
-
-
-    source(here::here("functions", "summary_functions.R"))
+dbms = "bigquery" # bigrquery DBI connection doesn't hold the information the same way.
 
 # ============================================================================
-# ################################ AOU #######################################
+# ################################ SETUP #######################################
 # ============================================================================
-} else if (data_source == "allofus") {
 
     library(allofus)
     con <- allofus::aou_connect(quiet = TRUE)
-    dbms = "bigquery" # bigrquery DBI connection doesn't hold the information the same way.
 
     # get cohort
     source(here::here("functions", "01-cohort-aou.R"))
     cohort_all = demo
     # get pp
+    # takes a hot second
     source(here::here("functions", "02-polypharmacy-aou.R"))
 
     # creating fi tables
@@ -70,13 +33,6 @@ if(data_source == "pharmetrics"){
     efi_rev2 = aouFI::fi_indices %>% filter(fi == "efi_sno") %>% select(-fi) %>%
         left_join(aouFI::lb %>% filter(fi == "efi"), by = "category") %>%
         aou_create_temp_table(nchar_batch = 1e5)
-
-# ============================================================================
-# ################################ NONE #######################################
-# ============================================================================
-} else {
-    cat("data source does not exist")
-}
 
 # ============================================================================
 # ################################ VAFI #######################################

@@ -6,19 +6,20 @@ library(DatabaseConnector)
 library(CDMConnector)
 library(glue)
 
+# make sure you install the latest aouFI repo
+# remotes::install_github("roux-ohdsi/aouFI")
 
-# set to pharmetrics or allofus.
+# set to data source and dbms system.
+# This script works for everything except All of Us. (Probably).
 data_source = "pharmetrics"
-
+dbms = "redshift"
 
 # ============================================================================
-# ################################ PMTX #######################################
+# ################################ Setup #######################################
 # ============================================================================
-if(data_source == "pharmetrics"){
 
-    # pmtx connection
+    # connection
     source(here::here("functions", "connection_setup.R"))
-    dbms = con@dbms # pmtx
 
     # get cohort'
     source(here::here("functions", "01-cohort.R"))
@@ -30,44 +31,26 @@ if(data_source == "pharmetrics"){
 
     if(!DatabaseConnector::existsTable(con, my_schema, "vafi_rev2")){
 
-        tbl(con, inDatabaseSchema(my_schema, "vafi_rev")) |> collect() -> vafi_rev
-        vafi_lb = tbl(con, inDatabaseSchema(my_schema, "vafi_rev")) %>% collect() %>%
-            left_join(aouFI::lb %>% filter(fi == "vafi") %>% select(-fi), by = "category")
+        # creating fi tables
+        vafi_lb = aouFI::vafi_rev %>% select(category, concept_id, score) %>%
+            left_join(aouFI::lb %>% filter(fi == "vafi"), by = "category")
+
         insertTable_chunk(vafi_lb, "vafi_rev2")
     }
 
 
     if(DatabaseConnector::existsTable(con, my_schema, "efi_rev2")){
-        tbl(con, inDatabaseSchema(my_schema, "efi_rev")) |> collect() -> efi_rev
-        efi_lb = tbl(con, inDatabaseSchema(my_schema, "efi_rev")) %>% collect() %>%
-            left_join(aouFI::lb %>% filter(fi == "efi") %>% select(-fi), by = "category")
+        # creating fi tables
+        efi_lb = aouFI::fi_indices %>% filter(fi == "efi_sno") %>% select(-fi) %>%
+            left_join(aouFI::lb %>% filter(fi == "efi"), by = "category")
+
         insertTable_chunk(efi_lb, "efi_rev2")
     }
 
 
     source(here::here("functions", "summary_functions.R"))
 
-# ============================================================================
-# ################################ AOU #######################################
-# ============================================================================
-} else if (data_source == "allofus") {
 
-    library(allofus)
-    con <- allofus::aou_connect(quiet = TRUE)
-    dbms = "bigquery" # bigrquery DBI connection doesn't hold the information the same way.
-
-    # get cohort
-    source(here::here("functions", "01-cohort-aou.R"))
-    cohort_all = demo
-    # get pp
-    source(here::here("functions", "02-polypharmacy-aou.R"))
-
-# ============================================================================
-# ################################ NONE #######################################
-# ============================================================================
-} else {
-    cat("data source does not exist")
-}
 
 # ============================================================================
 # ################################ VAFI #######################################
@@ -84,7 +67,7 @@ vafi_all <- omop2fi_lb(con = con,
                        keep_columns = c("age_group", "is_female"),
                        collect = FALSE,
                        unique_categories = TRUE,
-                       dbms = "redshift",
+                       dbms = dbms,
                        concept_location = tbl(con, inDatabaseSchema(my_schema, "vafi_rev2")) |> rename(chronic_category = lookback),
                        acute_lookback = 1,
                        chronic_lookback = 1
@@ -112,7 +95,7 @@ vafi_all <- omop2fi_lb(con = con,
                        keep_columns = c("age_group", "is_female"),
                        collect = FALSE,
                        unique_categories = TRUE,
-                       dbms = "redshift",
+                       dbms = dbms,
                        concept_location = tbl(con, inDatabaseSchema(my_schema, "vafi_rev2")) |> rename(chronic_category = lookback),
                        acute_lookback = 1,
                        chronic_lookback = 3
@@ -216,7 +199,7 @@ efi_all <- aouFI::omop2fi_lb(con = con,
                              search_end_date = "index_date",
                              keep_columns = c("age_group", "is_female"),
                              collect = FALSE,
-                             dbms = "redshift",
+                             dbms = dbms,
                              unique_categories = TRUE,
                              concept_location = tbl(con, inDatabaseSchema(my_schema, "efi_rev2")) |> rename(chronic_category = lookback),
                              acute_lookback = 1,
@@ -250,7 +233,7 @@ efi_all <- omop2fi_lb(con = con,
                        keep_columns = c("age_group", "is_female"),
                        collect = FALSE,
                        unique_categories = TRUE,
-                       dbms = "redshift",
+                       dbms = dbms,
                        concept_location = tbl(con, inDatabaseSchema(my_schema, "efi_rev2")) |> rename(chronic_category = lookback),
                        acute_lookback = 1,
                        chronic_lookback = 3

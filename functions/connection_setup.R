@@ -16,9 +16,6 @@ library(here)
 #usr = keyring::key_get("lab_user")
 #pw  = keyring::key_get("lab_password")
 
-
-usr = "r_cavanaugh169"
-pw = "7LpJa4BbvL0f"
 # DB Connections
 base_url = "https://atlas.roux-ohdsi-prod.aws.northeastern.edu/WebAPI"
 cdm_schema = "omop_cdm_53_pmtx_202203"

@@ -123,6 +123,7 @@ if(data_source == "allofus"){
     if(DatabaseConnector::existsTable(con, my_schema, "frailty_cohort_polypharmacy")){
         cat("polypharmacy table already exists")
     } else {
+        pp = calculate_pp()
         CDMConnector::computeQuery(pp, "frailty_cohort_polypharmacy", temporary = FALSE, schema = my_schema, overwrite = TRUE)
     }
 
