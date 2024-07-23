@@ -216,6 +216,7 @@ efi_all <- aouFI::omop2fi_lb(con = con,
                              search_end_date = "index_date",
                              keep_columns = c("age_group", "is_female"),
                              collect = FALSE,
+                             dbms = "redshift",
                              unique_categories = TRUE,
                              concept_location = tbl(con, inDatabaseSchema(my_schema, "efi_rev2")) |> rename(chronic_category = lookback),
                              acute_lookback = 1,
@@ -228,11 +229,10 @@ union_all(
     tbl(con, inDatabaseSchema(my_schema, "frailty_cohort_polypharmacy"))
 ) %>% distinct() -> efi_all
 
-# save result of query as intermediate step #2
-
 dplyr::compute(efi_all, inDatabaseSchema(my_schema, "efi_all_aa"),
                temporary = FALSE,
                overwrite = TRUE)
+
 
 rm(efi_all)
 
