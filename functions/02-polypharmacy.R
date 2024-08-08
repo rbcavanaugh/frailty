@@ -129,6 +129,7 @@ if(data_source == "allofus"){
 
 }
 
+cat("polypharmacy retrieved successfully")
 
 # # calculate prevalence.
 # pp_prevalence = cohort_all %>%

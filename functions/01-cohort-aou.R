@@ -34,6 +34,9 @@ demo <- tbl(con, "cb_search_person") %>%
     select(person_id, is_female, age_group, visit_lookback_date, index_date)
 
 demo_c = collect(demo)
+
+cat("Cohort retrieved successfully")
+
 # print(nrow(demo_c))
 # #write_csv(demo_c, "cohort.csv")
 # sample_size = nrow(demo_c)

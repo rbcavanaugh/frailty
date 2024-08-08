@@ -1,11 +1,10 @@
 
 library(tidyverse)
-library(DBI)
-library(DatabaseConnector)
 library(CDMConnector)
 library(glue)
+library(here)
 library(allofus)
-library(aouFI)
+#library(aouFI)
 
 # set to pharmetrics or allofus.
 data_source = "allofus"
@@ -15,7 +14,6 @@ dbms = "bigquery" # bigrquery DBI connection doesn't hold the information the sa
 # ################################ SETUP #######################################
 # ============================================================================
 
-    library(allofus)
     con <- allofus::aou_connect(quiet = TRUE)
 
     # get cohort
@@ -23,15 +21,26 @@ dbms = "bigquery" # bigrquery DBI connection doesn't hold the information the sa
     cohort_all = demo
     # get pp
     # takes a hot second
-    source(here::here("functions", "02-polypharmacy-aou.R"))
+    source(here::here("functions", "02-polypharmacy.R"))
+    # get the omop2fi_lb() function
+    source(here::here("functions", "omop2fi_lb.R"))
+    # get teh summary functions
+    source(here::here("functions", "summary_functions.R"))
 
     # creating fi tables
-    vafi_rev2 = aouFI::vafi_rev %>% select(category, concept_id, score) %>%
-        left_join(aouFI::lb %>% filter(fi == "vafi"), by = "category") %>%
+
+    vafi_dat = read_rds(here("data", "vafi_rev.rds"))
+    efi_dat = read_rds(here("data", "efi_sno_rev.rds"))
+    lb_dat = read_rds(here("data", "lb.rds"))
+
+    vafi_rev2 = vafi_dat %>%
+        select(category, concept_id, score) %>%
+        left_join(lb_dat %>% filter(fi == "vafi"), by = "category") %>%
         aou_create_temp_table(nchar_batch = 1e5)
 
-    efi_rev2 = aouFI::fi_indices %>% filter(fi == "efi_sno") %>% select(-fi) %>%
-        left_join(aouFI::lb %>% filter(fi == "efi"), by = "category") %>%
+    efi_rev2 = efi_dat %>%
+        select(-fi) %>%
+        left_join(lb_dat %>% filter(fi == "efi"), by = "category") %>%
         aou_create_temp_table(nchar_batch = 1e5)
 
 # ============================================================================
@@ -96,7 +105,7 @@ vafi_all_summary <- fi_with_robust(
 t = summarize_fi(vafi_all_summary) %>% collect()
 write.csv(t, glue("KI/{Sys.Date()}_vafi_acute1-chronic1_{data_source}.csv"), row.names = FALSE)
 
-vafi_cats = aouFI::vafi_rev %>% distinct(category) %>% pull(category)
+vafi_cats = vafi_dat %>% distinct(category) %>% pull(category)
 vafi_c = vafi_all %>% select(person_id, category) %>% collect() %>% mutate(score = 1)
 
 vafi_cat_summary = summarize_cats(
@@ -130,7 +139,7 @@ vafi_all_summary <- fi_with_robust(
 t = summarize_fi(vafi_all_summary) %>% collect()
 write.csv(t, glue("KI/{Sys.Date()}_vafi_acute1-chronic3_{data_source}.csv"), row.names = FALSE)
 
-vafi_cats = aouFI::vafi_rev %>% distinct(category) %>% pull(category)
+vafi_cats = vafi_dat %>% distinct(category) %>% pull(category)
 vafi_c = vafi_all %>% select(person_id, category) %>% collect() %>% mutate(score = 1)
 
 vafi_cat_summary = summarize_cats(
@@ -157,7 +166,7 @@ gc()
 # ################################ EFI #######################################
 # ============================================================================
 
-efi_all <- aouFI::omop2fi_lb(con = con,
+efi_all <- omop2fi_lb(con = con,
                              index = "efi",
                              .data_search = cohort_all,
                              search_person_id = "person_id",
@@ -224,7 +233,7 @@ efi_all_summary <- fi_with_robust(
 t = summarize_fi(efi_all_summary) %>% collect()
 write.csv(t, glue("KI/{Sys.Date()}_efi_acute1-chronic1_{data_source}.csv"), row.names = FALSE)
 
-efi_cats = aouFI::fi_indices %>% filter(fi == "efi_sno") %>% distinct(category) %>% pull(category)
+efi_cats = efi_dat %>% distinct(category) %>% pull(category)
 efi_c = efi_all %>% select(person_id, category, score) %>% collect()
 # cohort_c from above with vafi
 
@@ -262,7 +271,7 @@ efi_all_summary <- fi_with_robust(
 t = summarize_fi(efi_all_summary) %>% collect()
 write.csv(t, glue("KI/{Sys.Date()}_efi_acute1-chronic3_{data_source}.csv"), row.names = FALSE)
 
-efi_cats = aouFI::fi_indices %>% filter(fi == "efi_sno") %>% distinct(category) %>% pull(category)
+efi_cats = efi_dat %>% distinct(category) %>% pull(category)
 efi_c = efi_all %>% select(person_id, category, score) %>% collect()
 # cohort_c from above with vafi
 
