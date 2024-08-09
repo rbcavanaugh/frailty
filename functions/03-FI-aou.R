@@ -43,6 +43,14 @@ dbms = "bigquery" # bigrquery DBI connection doesn't hold the information the sa
         left_join(lb_dat %>% filter(fi == "efi"), by = "category") %>%
         aou_create_temp_table(nchar_batch = 1e5)
 
+    # set lookbacks
+    # per Brianne 8/9/24: just set to 1 and 3 year - no variable.
+    acute_lb_1 = 1
+    chronic_lb_1 = 1
+
+    acute_lb_2 = 3
+    chronic_lb_2 = 3
+
 # ============================================================================
 # ################################ VAFI #######################################
 # ============================================================================
@@ -60,8 +68,8 @@ vafi_all_aa <- omop2fi_lb(con = con,
                        unique_categories = TRUE,
                        dbms = "bigquery",
                        concept_location = vafi_rev2 |> rename(chronic_category = lookback),
-                       acute_lookback = 1,
-                       chronic_lookback = 1
+                       acute_lookback = acute_lb_1,
+                       chronic_lookback = chronic_lb_1
 ) |>
     distinct(person_id, age_group, is_female, score, category)
 
@@ -82,8 +90,8 @@ vafi_all_ac <- omop2fi_lb(con = con,
                           unique_categories = TRUE,
                           dbms = "bigquery",
                           concept_location = vafi_rev2 |> rename(chronic_category = lookback),
-                       acute_lookback = 1,
-                       chronic_lookback = 3
+                       acute_lookback = acute_lb_2,
+                       chronic_lookback = chronic_lb_2
 ) |>
     distinct(person_id, age_group, is_female, score, category)
 
@@ -137,7 +145,7 @@ vafi_all_summary <- fi_with_robust(
 
 # summarize
 t = summarize_fi(vafi_all_summary) %>% collect()
-write.csv(t, glue("KI/{Sys.Date()}_vafi_acute1-chronic3_{data_source}.csv"), row.names = FALSE)
+write.csv(t, glue("KI/{Sys.Date()}_vafi_acute3-chronic3_{data_source}.csv"), row.names = FALSE)
 
 vafi_cats = vafi_dat %>% distinct(category) %>% pull(category)
 vafi_c = vafi_all %>% select(person_id, category) %>% collect() %>% mutate(score = 1)
@@ -152,7 +160,7 @@ vafi_cat_summary = summarize_cats(
     mutate(count = ifelse(count < 20, 0, count),
            percent = ifelse(count < 20, 0, percent))
 
-write.csv(vafi_cat_summary, glue("KI/{Sys.Date()}_vafi_categories_acute1-chronic3_{data_source}.csv"), row.names = FALSE)
+write.csv(vafi_cat_summary, glue("KI/{Sys.Date()}_vafi_categories_acute3-chronic3_{data_source}.csv"), row.names = FALSE)
 
 
 rm(t)
@@ -177,8 +185,8 @@ efi_all <- omop2fi_lb(con = con,
                              unique_categories = TRUE,
                              dbms = "bigquery",
                              concept_location = efi_rev2 |> rename(chronic_category = lookback),
-                             acute_lookback = 1,
-                             chronic_lookback = 1
+                             acute_lookback = acute_lb_1,
+                             chronic_lookback = chronic_lb_1
 ) |>
     distinct(person_id, age_group, is_female, score, category)
 
@@ -204,8 +212,8 @@ efi_all <- omop2fi_lb(con = con,
                        unique_categories = TRUE,
                        dbms = "bigquery",
                        concept_location = efi_rev2 |> rename(chronic_category = lookback),
-                       acute_lookback = 1,
-                       chronic_lookback = 3
+                       acute_lookback = acute_lb_2,
+                       chronic_lookback = chronic_lb_2
 ) |>
     distinct(person_id, age_group, is_female, score, category)
 
@@ -227,7 +235,7 @@ efi_all = efi_all_aa
 efi_all_summary <- fi_with_robust(
     fi_query = efi_all,
     cohort = cohort_all,
-    denominator = 35, lb = 0.12, ub = 0.24)
+    denominator = 36, lb = 0.12, ub = 0.24)
 
 # summarize
 t = summarize_fi(efi_all_summary) %>% collect()
@@ -265,11 +273,11 @@ efi_all = efi_all_ac
 efi_all_summary <- fi_with_robust(
     fi_query = efi_all,
     cohort = cohort_all,
-    denominator = 35, lb = 0.12, ub = 0.24)
+    denominator = 36, lb = 0.12, ub = 0.24)
 
 # summarize
 t = summarize_fi(efi_all_summary) %>% collect()
-write.csv(t, glue("KI/{Sys.Date()}_efi_acute1-chronic3_{data_source}.csv"), row.names = FALSE)
+write.csv(t, glue("KI/{Sys.Date()}_efi_acute3-chronic3_{data_source}.csv"), row.names = FALSE)
 
 efi_cats = efi_dat %>% distinct(category) %>% pull(category)
 efi_c = efi_all %>% select(person_id, category, score) %>% collect()
@@ -285,7 +293,7 @@ efi_cat_summary = summarize_cats(
     mutate(count = ifelse(count < 20, 0, count),
            percent = ifelse(count < 20, 0, percent))
 
-write.csv(efi_cat_summary, glue("KI/{Sys.Date()}_efi_categories_acute1-chronic3_{data_source}.csv"), row.names = FALSE)
+write.csv(efi_cat_summary, glue("KI/{Sys.Date()}_efi_categories_acute3-chronic3_{data_source}.csv"), row.names = FALSE)
 
 
 
