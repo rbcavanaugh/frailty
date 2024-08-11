@@ -25,24 +25,35 @@ dbms = "redshift"
     source(here::here("functions", "01-cohort.R"))
     cohort_all = tbl(con, inDatabaseSchema(my_schema, "frailty_cohort_clean")) # PMTX
     # get pp data
-    source(here::here("functions", "02-polypharmacy-aou.R"))
+    source(here::here("functions", "02-polypharmacy.R"))
+    # get the omop2fi_lb() function
+    source(here::here("functions", "omop2fi_lb.R"))
+
+    # creating fi tables
+    vafi_dat = read_rds(here("data", "vafi_rev.rds"))
+    efi_dat = read_rds(here("data", "efi_sno_rev.rds"))
+    lb_dat = read_rds(here("data", "lb.rds"))
 
     # setup FI in pharmetrics
 
     if(!DatabaseConnector::existsTable(con, my_schema, "vafi_rev2")){
 
-        # creating fi tables
-        vafi_lb = aouFI::vafi_rev %>% select(category, concept_id, score) %>%
-            left_join(aouFI::lb %>% filter(fi == "vafi"), by = "category")
+
+
+        vafi_lb = vafi_dat %>%
+            select(category, concept_id, score) %>%
+            left_join(lb_dat %>% filter(fi == "vafi"), by = "category")
+
 
         insertTable_chunk(vafi_lb, "vafi_rev2")
     }
 
 
-    if(DatabaseConnector::existsTable(con, my_schema, "efi_rev2")){
+    if(!DatabaseConnector::existsTable(con, my_schema, "efi_rev2")){
         # creating fi tables
-        efi_lb = aouFI::fi_indices %>% filter(fi == "efi_sno") %>% select(-fi) %>%
-            left_join(aouFI::lb %>% filter(fi == "efi"), by = "category")
+        efi_lb = efi_dat %>%
+            select(-fi) %>%
+            left_join(lb_dat %>% filter(fi == "efi"), by = "category")
 
         insertTable_chunk(efi_lb, "efi_rev2")
     }
@@ -50,7 +61,25 @@ dbms = "redshift"
 
     source(here::here("functions", "summary_functions.R"))
 
+    # set lookbacks
+    # per Brianne 8/9/24: just set to 1 and 3 year - no variable.
+    acute_lb_1 = 1
+    chronic_lb_1 = 1
 
+    acute_lb_2 = 3
+    chronic_lb_2 = 3
+
+    # remove results temporary steps
+    # toggle to true to run
+    remove = FALSE
+    if(isTRUE(remove)){
+
+        executeSql(con, glue::glue("DROP TABLE {my_schema}.vafi_all_aa"))
+        executeSql(con, glue::glue("DROP TABLE {my_schema}.vafi_all_ac"))
+        executeSql(con, glue::glue("DROP TABLE {my_schema}.efi_all_aa"))
+        executeSql(con, glue::glue("DROP TABLE {my_schema}.efi_all_ac"))
+
+    }
 
 # ============================================================================
 # ################################ VAFI #######################################
@@ -69,8 +98,8 @@ vafi_all <- omop2fi_lb(con = con,
                        unique_categories = TRUE,
                        dbms = dbms,
                        concept_location = tbl(con, inDatabaseSchema(my_schema, "vafi_rev2")) |> rename(chronic_category = lookback),
-                       acute_lookback = 1,
-                       chronic_lookback = 1
+                       acute_lookback = acute_lb_1,
+                       chronic_lookback = chronic_lb_1
 ) |>
     distinct(person_id, age_group, is_female, score, category)
 
@@ -97,8 +126,8 @@ vafi_all <- omop2fi_lb(con = con,
                        unique_categories = TRUE,
                        dbms = dbms,
                        concept_location = tbl(con, inDatabaseSchema(my_schema, "vafi_rev2")) |> rename(chronic_category = lookback),
-                       acute_lookback = 1,
-                       chronic_lookback = 3
+                       acute_lookback = acute_lb_2,
+                       chronic_lookback = chronic_lb_2
 ) |>
     distinct(person_id, age_group, is_female, score, category)
 
@@ -129,7 +158,7 @@ vafi_all_summary <- fi_with_robust(
 t = summarize_fi(vafi_all_summary) %>% collect()
 write.csv(t, glue("KI/{Sys.Date()}_vafi_acute1-chronic1_{data_source}.csv"), row.names = FALSE)
 
-vafi_cats = aouFI::vafi_rev %>% distinct(category) %>% pull(category)
+vafi_cats = vafi_dat %>% distinct(category) %>% pull(category)
 vafi_c = vafi_all %>% select(person_id, category) %>% collect() %>% mutate(score = 1)
 
 vafi_cat_summary = summarize_cats(
@@ -161,9 +190,9 @@ vafi_all_summary <- fi_with_robust(
 
 # summarize
 t = summarize_fi(vafi_all_summary) %>% collect()
-write.csv(t, glue("KI/{Sys.Date()}_vafi_acute1-chronic3_{data_source}.csv"), row.names = FALSE)
+write.csv(t, glue("KI/{Sys.Date()}_vafi_acute3-chronic3_{data_source}.csv"), row.names = FALSE)
 
-vafi_cats = aouFI::vafi_rev %>% distinct(category) %>% pull(category)
+vafi_cats = vafi_dat %>% distinct(category) %>% pull(category)
 vafi_c = vafi_all %>% select(person_id, category) %>% collect() %>% mutate(score = 1)
 
 vafi_cat_summary = summarize_cats(
@@ -176,7 +205,7 @@ vafi_cat_summary = summarize_cats(
     mutate(count = ifelse(count < 20, 0, count),
            percent = ifelse(count < 20, 0, percent))
 
-write.csv(vafi_cat_summary, glue("KI/{Sys.Date()}_vafi_categories_acute1-chronic3_{data_source}.csv"), row.names = FALSE)
+write.csv(vafi_cat_summary, glue("KI/{Sys.Date()}_vafi_categories_acute3-chronic3_{data_source}.csv"), row.names = FALSE)
 
 
 rm(t)
@@ -190,7 +219,7 @@ gc()
 # ################################ EFI #######################################
 # ============================================================================
 
-efi_all <- aouFI::omop2fi_lb(con = con,
+efi_all <- omop2fi_lb(con = con,
                              schema = cdm_schema,
                              index = "efi",
                              .data_search = cohort_all,
@@ -202,8 +231,8 @@ efi_all <- aouFI::omop2fi_lb(con = con,
                              dbms = dbms,
                              unique_categories = TRUE,
                              concept_location = tbl(con, inDatabaseSchema(my_schema, "efi_rev2")) |> rename(chronic_category = lookback),
-                             acute_lookback = 1,
-                             chronic_lookback = 1
+                             acute_lookback = acute_lb_1,
+                             chronic_lookback = chronic_lb_1
 ) |>
     distinct(person_id, age_group, is_female, score, category)
 
@@ -235,8 +264,8 @@ efi_all <- omop2fi_lb(con = con,
                        unique_categories = TRUE,
                        dbms = dbms,
                        concept_location = tbl(con, inDatabaseSchema(my_schema, "efi_rev2")) |> rename(chronic_category = lookback),
-                       acute_lookback = 1,
-                       chronic_lookback = 3
+                       acute_lookback = acute_lb_2,
+                       chronic_lookback = chronic_lb_2
 ) |>
     distinct(person_id, age_group, is_female, score, category)
 
@@ -270,7 +299,7 @@ efi_all_summary <- fi_with_robust(
 t = summarize_fi(efi_all_summary) %>% collect()
 write.csv(t, glue("KI/{Sys.Date()}_efi_acute1-chronic1_{data_source}.csv"), row.names = FALSE)
 
-efi_cats = aouFI::fi_indices %>% filter(fi == "efi_sno") %>% distinct(category) %>% pull(category)
+efi_cats = efi_dat %>% distinct(category) %>% pull(category)
 efi_c = efi_all %>% select(person_id, category, score) %>% collect()
 # cohort_c from above with vafi
 
@@ -305,9 +334,9 @@ efi_all_summary <- fi_with_robust(
 
 # summarize
 t = summarize_fi(efi_all_summary) %>% collect()
-write.csv(t, glue("KI/{Sys.Date()}_efi_acute1-chronic3_{data_source}.csv"), row.names = FALSE)
+write.csv(t, glue("KI/{Sys.Date()}_efi_acute3-chronic3_{data_source}.csv"), row.names = FALSE)
 
-efi_cats = aouFI::fi_indices %>% filter(fi == "efi_sno") %>% distinct(category) %>% pull(category)
+efi_cats = efi_dat %>% distinct(category) %>% pull(category)
 efi_c = efi_all %>% select(person_id, category, score) %>% collect()
 # cohort_c from above with vafi
 
@@ -321,7 +350,7 @@ efi_cat_summary = summarize_cats(
     mutate(count = ifelse(count < 20, 0, count),
            percent = ifelse(count < 20, 0, percent))
 
-write.csv(efi_cat_summary, glue("KI/{Sys.Date()}_efi_categories_acute1-chronic3_{data_source}.csv"), row.names = FALSE)
+write.csv(efi_cat_summary, glue("KI/{Sys.Date()}_efi_categories_acute3-chronic3_{data_source}.csv"), row.names = FALSE)
 
 
 

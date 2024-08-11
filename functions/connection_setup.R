@@ -4,7 +4,7 @@ library(DatabaseConnector)
 library(CDMConnector)
 library(tidyverse)
 library(ohdsilab)
-library(aouFI)
+#library(aouFI)
 library(here)
 
 # Credentials
