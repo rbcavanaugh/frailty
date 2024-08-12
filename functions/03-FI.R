@@ -300,7 +300,7 @@ efi_all = tbl(con, inDatabaseSchema(my_schema, "efi_all_aa"))
 efi_all_summary <- fi_with_robust(
     fi_query = efi_all,
     cohort = cohort_all,
-    denominator = 35, lb = 0.12, ub = 0.24)
+    denominator = 36, lb = 0.12, ub = 0.24)
 
 # summarize
 t = summarize_fi(efi_all_summary) %>% collect()
@@ -337,7 +337,7 @@ efi_all = tbl(con, inDatabaseSchema(my_schema, "efi_all_ac"))
 efi_all_summary <- fi_with_robust(
     fi_query = efi_all,
     cohort = cohort_all,
-    denominator = 35, lb = 0.12, ub = 0.24)
+    denominator = 36, lb = 0.12, ub = 0.24)
 
 # summarize
 t = summarize_fi(efi_all_summary) %>% collect()
