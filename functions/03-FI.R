@@ -31,8 +31,13 @@ dbms = "redshift"
 
     # creating fi tables
     vafi_dat = read_rds(here("data", "vafi_rev.rds"))
-    efi_dat = read_rds(here("data", "efi_sno_rev.rds"))
     lb_dat = read_rds(here("data", "lb.rds"))
+
+    # note that for efi we have two other options saved.
+    # efi_read_to_omop.rds contains read codes mapped to omop (original approach)
+    # efi_sno_to_omop_descendants.rds includes descendants
+    efi_dat = read_rds(here("data", "efi_sno_rev.rds"))
+
 
     # setup FI in pharmetrics
 
