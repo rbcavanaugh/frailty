@@ -36,6 +36,8 @@ dbms = "redshift"
     # note that for efi we have two other options saved.
     # efi_read_to_omop.rds contains read codes mapped to omop (original approach)
     # efi_sno_to_omop_descendants.rds includes descendants
+    # to use these, make sure to remove the current efi table, change this reference,
+    # and then re-write the efi table on the db
     efi_dat = read_rds(here("data", "efi_sno_rev.rds"))
 
 
