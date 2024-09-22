@@ -76,7 +76,7 @@ if(DatabaseConnector::existsTable(con, my_schema, "frailty_cohort_clean")){
             filter(index_date == min(index_date)) |>
             ungroup()
 
-        CDMConnector::computeQuery(pp, "frailty_cohort_polypharmacy", temporary = FALSE, schema = my_schema, overwrite = TRUE)
+        CDMConnector::computeQuery(cohort_all, "frailty_cohort_clean", temporary = FALSE, schema = my_schema, overwrite = TRUE)
 
 }
 
