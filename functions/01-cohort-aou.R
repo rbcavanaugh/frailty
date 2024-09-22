@@ -9,17 +9,22 @@ survey_dates = tbl(con, "ds_survey") %>%
     distinct(person_id, survey_datetime) %>%
     mutate(survey_date = as.Date(survey_datetime))
 
+obs = allofus::aou_observation_period(cohort = tbl(con, "cb_search_person") %>% filter(has_ehr_data == 1))
+
 
 demo <- tbl(con, "cb_search_person") %>%
     filter(has_ehr_data == 1) %>%
     # just hold on to all the unique ids for merging
     distinct(person_id, sex_at_birth, dob)  %>%
+    left_join(obs, by = "person_id") %>%
     # combine with survey dates
     inner_join(survey_dates, by = "person_id") %>%
-    select(person_id, sex_at_birth, dob, survey_date) %>%
+    select(person_id, sex_at_birth, dob, survey_date, observation_period_start_date, observation_period_end_date) %>%
     mutate(index_date = !!CDMConnector::dateadd("survey_date", 1, "year")) %>%
     mutate(age = !!CDMConnector::datediff("dob","index_date","year")) %>%
-    filter(age >= 40 & age <= 100) %>%
+    filter(age >= 40,
+           index_date < observation_period_end_date,
+           survey_date > observation_period_start_date) %>%
     select(person_id,
            gender_source_value = sex_at_birth,
            age,
@@ -48,3 +53,27 @@ cat("Cohort retrieved successfully")
 #     drop_na(age_group)
 # sum(demo_summary$n) == nrow(demo_c)
 # write_csv(demo_summary, paste(Sys.Date(), "AoU_cohort_summary.csv", sep = "-"))
+#
+
+
+# t1 = tbl(con, "cb_search_person") %>%
+#     filter(has_ehr_data == 1) %>%
+#     # just hold on to all the unique ids for merging
+#     distinct(person_id, sex_at_birth, dob)  %>%
+#     left_join(obs, by = "person_id") %>%
+#     # combine with survey dates
+#     inner_join(survey_dates, by = "person_id") %>%
+#     select(person_id, sex_at_birth, dob, survey_date, observation_period_start_date, observation_period_end_date) %>%
+#     mutate(index_date = !!CDMConnector::dateadd("survey_date", 1, "year")) %>%
+#     mutate(age = !!CDMConnector::datediff("dob","index_date","year")) %>%
+#     filter(age >= 40)
+#
+# t2 = t1 %>%
+#     filter(index_date < observation_period_end_date)
+#
+# t3 = t2 %>%
+#     filter(survey_date > observation_period_start_date)
+# t1 %>% tally()
+# t2 %>% tally()
+# t3 %>% tally()
+#
