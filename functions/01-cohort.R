@@ -74,8 +74,10 @@ if(DatabaseConnector::existsTable(con, my_schema, "frailty_cohort_clean")){
             inner_join(cohort_ids, by = "person_id") |>
             group_by(person_id) |>
             filter(index_date == min(index_date)) |>
+            distinct() |>
             ungroup()
 
+        #executeSql(con, glue::glue("DROP TABLE {my_schema}.frailty_cohort_clean"))
         CDMConnector::computeQuery(cohort_all, "frailty_cohort_clean", temporary = FALSE, schema = my_schema, overwrite = TRUE)
 
 }
