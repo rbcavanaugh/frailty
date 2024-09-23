@@ -33,7 +33,7 @@ demo <- tbl(con, "cb_search_person") %>%
     mutate(
         is_female = ifelse(gender_source_value == "Male", 0, 1),
         age_group = cut(age,
-                        breaks = c(40,  45,  50,  55, 60,  65,  70,  75,  80,  100),
+                        breaks = c(40,  45,  50,  55, 60,  65,  70,  75,  80,  120),
                         right = FALSE, include.lowest = TRUE),
     ) %>%
     select(person_id, is_female, age_group, visit_lookback_date, index_date)
