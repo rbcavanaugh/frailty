@@ -7,24 +7,48 @@ survey_dates = tbl(con, "ds_survey") %>%
     group_by(person_id) %>%
     filter(survey_datetime == min(survey_datetime)) %>%
     distinct(person_id, survey_datetime) %>%
-    mutate(survey_date = as.Date(survey_datetime))
+    mutate(survey_date = as.Date(survey_datetime)) %>%
+    aou_compute()
+
+tally(survey_dates) # 413360
 
 obs = allofus::aou_observation_period(cohort = tbl(con, "cb_search_person") %>% filter(has_ehr_data == 1))
 
 
 demo <- tbl(con, "cb_search_person") %>%
+    aou_compute()
+cat("all participants")
+tally(demo) # 413457
+
+demo <- demo %>%
     filter(has_ehr_data == 1) %>%
-    # just hold on to all the unique ids for merging
     distinct(person_id, sex_at_birth, dob)  %>%
+    aou_compute()
+cat("with ehr data")
+tally(demo) # 287012
+
+demo <- demo %>%
+    # just hold on to all the unique ids for merging
     left_join(obs, by = "person_id") %>%
     # combine with survey dates
     inner_join(survey_dates, by = "person_id") %>%
     select(person_id, sex_at_birth, dob, survey_date, observation_period_start_date, observation_period_end_date) %>%
     mutate(index_date = !!CDMConnector::dateadd("survey_date", 1, "year")) %>%
     mutate(age = !!CDMConnector::datediff("dob","index_date","year")) %>%
-    filter(age >= 40,
-           index_date < observation_period_end_date,
-           survey_date > observation_period_start_date) %>%
+    filter(
+        index_date < observation_period_end_date,
+        survey_date > observation_period_start_date) %>%
+    aou_compute()
+
+cat("with sufficient observation")
+tally(demo) # 214375
+
+cat("40 or older")
+demo <- demo %>%
+    filter(age >= 40)
+tally(demo) # 159721
+
+demo <- demo %>%
     select(person_id,
            gender_source_value = sex_at_birth,
            age,
@@ -39,6 +63,7 @@ demo <- tbl(con, "cb_search_person") %>%
     select(person_id, is_female, age_group, visit_lookback_date, index_date)
 
 demo_c = collect(demo)
+tally(demo_c)
 
 cat("Cohort retrieved successfully")
 
