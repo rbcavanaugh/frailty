@@ -14,6 +14,11 @@ if(DatabaseConnector::existsTable(con, my_schema, "frailty_cohort_clean")){
         library(CDMConnector)
         library(glue)
 
+
+    # saving as a persistent table in my schema as a midpoint/ intermediate table. This could be a
+    # temporary table if needed.
+    ohdsilab::set_seed(0.5)
+
         # cdm_schema is the omop db
         # my_schema is the user write schema
 
@@ -25,30 +30,44 @@ if(DatabaseConnector::existsTable(con, my_schema, "frailty_cohort_clean")){
         # Join person table to visit occurrence table
         # Pick a random visit. I think this SqlRender::translate() should make this a bit
         # more flexible to the different dbms...
+
+
+
         index_date_query <- tbl(con, inDatabaseSchema(cdm_schema, "person")) |>
             select(person_id, year_of_birth, gender_concept_id) |>
             omop_join("visit_occurrence", type = "inner", by = "person_id") |>
             select(person_id, index_date = visit_start_date, year_of_birth, gender_concept_id) |>
-            mutate(rand_index = sql(SqlRender::translate("RAND()", con@dbms)[[1]])) |>
+            mutate(rand_index = sql(SqlRender::translate("RAND()", dbms)[[1]])) |>
             slice_min(n = 1, by = person_id, order_by = rand_index) |>
             select(-rand_index)
+
+
 
         # From that query, make sure there are 365 days preceeding to the observation_period
         # start date. Filter for age at index date is >= 40
         #!!!!!!!!!!! Changed to: >= 365 below !!!!!!!!!!!!#
-        cohort <- index_date_query |>
+        cohort1 <- index_date_query |>
             omop_join("observation_period", type = "inner", by = "person_id") |>
-            filter(dateDiff("day", observation_period_start_date, index_date) >= 365) |>
+            filter(dateDiff("day", observation_period_start_date, index_date) >= 365) |> compute()
+
+        cohort <- cohort1 |>
             select(person_id, year_of_birth, gender_concept_id, index_date, observation_period_start_date, observation_period_end_date) |>
             mutate(age = year(index_date) - year_of_birth,
                    yob_imputed = ifelse(year_of_birth < 1938, 1, 0)) |>
             filter(age >= 40)
 
+        consort = FALSE
+        if(isTRUE(consort)){
+            n1 = tbl(con, inDatabaseSchema(cdm_schema, "person")) %>% tally() %>% collect()
+            n2 = index_date_query %>% tally() %>% collect()
+            n3 = cohort1 %>% tally() %>% collect()
+            n4 = cohort %>% tally() %>% collect()
+            out = unlist(c(n1, n2, n3, n4))
+            out
+        }
+
         # test = cohort |> dbi_collect()
 
-        # saving as a persistent table in my schema as a midpoint/ intermediate table. This could be a
-        # temporary table if needed.
-        ohdsilab::set_seed(0.5)
         #CDMConnector::computeQuery(cohort, "frailty_cohort", temporary = temporary_intermediate_steps, schema = my_schema, overwrite = TRUE)
 
 
