@@ -79,5 +79,5 @@ omop_cats = vafi |>
 
 df_plot = left_join(omop_cats, icd_cats, by = c("category")) #%>% filter(category != "HTN")
 
-write.csv(df_plot, "output/data_for_icc.csv")
+write.csv(df_plot, "output/data_for_icc_7-15-25.csv")
 

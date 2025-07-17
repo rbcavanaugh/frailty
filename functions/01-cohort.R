@@ -56,19 +56,24 @@ if(DatabaseConnector::existsTable(con, my_schema, "frailty_cohort_clean")){
                    yob_imputed = ifelse(year_of_birth < 1938, 1, 0)) |>
             filter(age >= 40)
 
-        consort = FALSE
+        consort = TRUE
         if(isTRUE(consort)){
             n1 = tbl(con, inDatabaseSchema(cdm_schema, "person")) %>% tally() %>% collect()
-            n2 = index_date_query %>% tally() %>% collect()
-            n3 = cohort1 %>% tally() %>% collect()
-            n4 = cohort %>% tally() %>% collect()
+            n2 = index_date_query %>% distinct(person_id) %>% tally() %>% collect()
+            n3 = cohort1 %>% distinct(person_id)%>% tally() %>% collect()
+            n4 = cohort %>% distinct(person_id) %>% tally() %>% collect()
             out = unlist(c(n1, n2, n3, n4))
             out
         }
 
-        # test = cohort |> dbi_collect()
+        print(out)
 
-        #CDMConnector::computeQuery(cohort, "frailty_cohort", temporary = temporary_intermediate_steps, schema = my_schema, overwrite = TRUE)
+        # n        n        n        n
+        # 34808145 28076893  9016272  5099557
+
+        CDMConnector::computeQuery(cohort, "frailty_cohort", temporary = FALSE,
+                                  # temporary = temporary_intermediate_steps,
+                                   schema = my_schema, overwrite = TRUE)
 
 
 
@@ -78,6 +83,8 @@ if(DatabaseConnector::existsTable(con, my_schema, "frailty_cohort_clean")){
         # Do it with everyone just omop VAFI
         cohort_ids <- tbl(con, inDatabaseSchema(my_schema, "frailty_cohort")) |>
             distinct(person_id)
+
+        tally(cohort_ids)
 
         cohort_all <- tbl(con, inDatabaseSchema(my_schema, "frailty_cohort")) %>%
             mutate(age = ifelse(yob_imputed == 1, 84, age)) %>%

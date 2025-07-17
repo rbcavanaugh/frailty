@@ -5,7 +5,7 @@ library(DBI)
 library(DatabaseConnector)
 library(CDMConnector)
 library(glue)
-
+library(here)
 # make sure you install the latest aouFI repo
 # remotes::install_github("roux-ohdsi/aouFI")
 
@@ -38,7 +38,7 @@ dbms = "redshift"
     # efi_sno_to_omop_descendants.rds includes descendants
     # to use these, make sure to remove the current efi table, change this reference,
     # and then re-write the efi table on the db
-    efi_dat = read_rds(here("data", "efi_sno_rev.rds"))
+    efi_dat = read_rds(here("data", "efi_possibly_eq.rds"))
 
 
     # setup FI in pharmetrics
