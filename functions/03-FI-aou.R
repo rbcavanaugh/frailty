@@ -30,7 +30,7 @@ dbms = "bigquery" # bigrquery DBI connection doesn't hold the information the sa
     # creating fi tables
 
     vafi_dat = read_rds(here("data", "vafi_rev.rds"))
-    efi_dat = read_rds(here("data", "efi_sno_rev.rds"))
+    efi_dat = read_rds(here("data", "efi_possibly_eq.rds"))
     lb_dat = read_rds(here("data", "lb.rds"))
 
     vafi_rev2 = vafi_dat %>%
@@ -40,7 +40,7 @@ dbms = "bigquery" # bigrquery DBI connection doesn't hold the information the sa
 
     efi_rev2 = efi_dat %>%
         select(-fi) %>%
-        left_join(lb_dat %>% filter(fi == "efi"), by = "category") %>%
+       # left_join(lb_dat %>% filter(fi == "efi"), by = "category") %>%
         aou_create_temp_table(nchar_batch = 1e5)
 
     # set lookbacks
