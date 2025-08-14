@@ -82,9 +82,9 @@ dbms = "redshift"
     if(isTRUE(remove)){
 
         executeSql(con, glue::glue("DROP TABLE {my_schema}.vafi_all_aa"))
-        executeSql(con, glue::glue("DROP TABLE {my_schema}.vafi_all_ac"))
+        #executeSql(con, glue::glue("DROP TABLE {my_schema}.vafi_all_ac"))
         executeSql(con, glue::glue("DROP TABLE {my_schema}.efi_all_aa"))
-        executeSql(con, glue::glue("DROP TABLE {my_schema}.efi_all_ac"))
+       # executeSql(con, glue::glue("DROP TABLE {my_schema}.efi_all_ac"))
 
     }
 
