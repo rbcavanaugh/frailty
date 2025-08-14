@@ -16,12 +16,20 @@ fi_with_robust <- function(fi_query, cohort, denominator, lb, ub){
         mutate(fi = 0, frail = 0, prefrail = 0, robust = 1)
 
     # add them back to the FI query while calculating the person-level FI
+    # fi_query |>
+    #     distinct(person_id, is_female, age_group, score, category) |>
+    #     summarize(fi = sum(score)/denominator, .by = c(person_id, age_group, is_female)) |>
+    #     mutate(prefrail = ifelse(fi>= lb & fi < ub, 1, 0),
+    #            frail = ifelse(fi>= ub, 1, 0),
+    #            robust = ifelse(fi < lb, 1, 0)) |> ungroup() |>
+    #     union_all(tmp)
+
     fi_query |>
         distinct(person_id, is_female, age_group, score, category) |>
         summarize(fi = sum(score)/denominator, .by = c(person_id, age_group, is_female)) |>
-        mutate(prefrail = ifelse(fi>= lb & fi < ub, 1, 0),
-               frail = ifelse(fi>= ub, 1, 0),
-               robust = ifelse(fi < lb, 1, 0)) |> ungroup() |>
+        mutate(prefrail = ifelse(fi> lb & fi <= ub, 1, 0),
+               frail = ifelse(fi> ub, 1, 0),
+               robust = ifelse(fi <= lb, 1, 0)) |> ungroup() |>
         union_all(tmp)
 
 }

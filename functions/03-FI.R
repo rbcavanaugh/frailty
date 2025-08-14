@@ -159,7 +159,7 @@ vafi_all = tbl(con, inDatabaseSchema(my_schema, "vafi_all_aa"))
 vafi_all_summary <- fi_with_robust(
     fi_query = vafi_all,
     cohort = cohort_all,
-    denominator = 31, lb = 0.11, ub = 0.21)
+    denominator = 31, lb = 0.10, ub = 0.20)
 
 # summarize
 t = summarize_fi(vafi_all_summary) %>% collect()
